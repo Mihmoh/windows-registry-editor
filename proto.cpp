@@ -1,4 +1,4 @@
-﻿#include <iostream>
+#include <iostream>
 #include <string.h>
 #include <string>
 #include <tchar.h>
@@ -6,9 +6,48 @@
 
 using namespace std;
 
+void recDeleteSubkey(wstring, wstring);
+
 void printMenu()
 {
-    printf("\n1 - choose key;\n2 - change value of key;\n3 - read value;\n4 - delete value;\n5 - create subkey;\n6 - delete subkey;\n7 - read all values in key\n8 - read subkeys of key\n0 - exit\n");
+    printf("\n1 - choose key;\n2 - change value of key;\n3 - read value;\n4 - delete value;\n5 - create subkey;\n6 - delete subkey;\n7 - read all values in key\n8 - read subkeys of key\n9 - recursive output\n0 - exit\n");
+}
+
+wchar_t* MyStrcat(const wchar_t* str1, const wchar_t* str2)
+{
+    int num1 = 0;
+    int num2 = 0;
+
+    const wchar_t* temp1;
+    const wchar_t* temp2;
+
+    temp1 = str1;
+    temp2 = str2;
+
+    while (*str1 != '\0') {
+        num1++;
+        str1++;
+    }
+    while (*str2 != '\0') {
+        num2++;
+        str2++;
+    }
+    wchar_t* str;
+    str = (wchar_t*)calloc(num1 + num2 + 1, sizeof(wchar_t));
+
+    str[num1 + num2] = '\0';
+    int i = 0;
+    while (*temp1 != '\0') {
+        str[i] = *temp1;
+        temp1++;
+        i++;
+    }
+    while (*temp2 != '\0') {
+        str[i] = *temp2;
+        temp2++;
+        i++;
+    }
+    return str;
 }
 
 wstring chooseKey()
@@ -76,11 +115,11 @@ void readValue(wstring wsubkey)
         LONG result = RegQueryValueEx(hKey, wNameOfValue.c_str(), NULL, NULL, buffer, &bufferSize);
         if (result == ERROR_SUCCESS)
         {
-            wprintf(L"Value is %s\n", buffer);
+            wprintf(L"Value is %s\n\n", buffer);
         }
         else
         {
-            cout << "Error: " << result << "\n";
+            cout << "Error: " << result << "\n\n";
         }
     }
     RegCloseKey(hKey);
@@ -94,9 +133,9 @@ void createSubKey()
     string subkey;
     wstring wsubkey;
 
-    printf("\nEnter name of subkey in format Prekols\\");
+    printf("\nEnter FULL path to new subkey in format Prekols\\");
     printf("\\");
-    printf("Your subkey \n");
+    printf("NewSubkey \n");
     getline(cin, subkey);
     getline(cin, subkey);
     wsubkey = wstring(subkey.begin(), subkey.end());
@@ -148,33 +187,25 @@ void deleteSubkey()
     printf("Your path \n");
     getline(cin, path);
     getline(cin, path);
-    printf("\nEnter name of subkey\n");
+    printf("\nEnter subkey to delete\n");
     getline(cin, subkey);
-    wsubkey = wstring(subkey.begin(), subkey.end());
     wpath = wstring(path.begin(), path.end());
+    wsubkey = wstring(subkey.begin(), subkey.end());
 
-    if (RegOpenKeyEx(HKEY_CURRENT_USER, wpath.c_str(), 0, KEY_ALL_ACCESS, &hKey) == ERROR_SUCCESS)
-    {
-        if (RegDeleteKey(hKey, wsubkey.c_str()) == ERROR_SUCCESS)
-            cout << "\nSubKey successfully removed.\n";
-        else
-            cout << "\nError removing the specified key (permissions?).\n";
-    }
-    else
-        cout << "\nError opening the specified subkey path (doesn't exist?).\n";
+    recDeleteSubkey(wpath, wsubkey);
 
-    RegCloseKey(hKey);
 }
 
 void readValuesInKey(wstring wpath)
 {
     HKEY hKey;
-    DWORD index = 1;
+    DWORD index = 0;
     wchar_t ValueName[MAX_PATH];
     DWORD SizeValueName = MAX_PATH;
     DWORD Type;
     unsigned char Data[MAX_PATH];
     DWORD DataSize = MAX_PATH;
+    unsigned long iData = 0;
     int result = 0;
     int intData = 0;
 
@@ -200,9 +231,10 @@ void readValuesInKey(wstring wpath)
                 wprintf(L"|| %d", Data);
                 break;
             case 4:
-                printf("REG_DWORD ");                
-                intData = Data[0] - '0';
-                wprintf(L"|| %s", Data);
+                //RegEnumValue(hKey, index - 1, ValueName, &(SizeValueName = MAX_PATH), NULL, &Type, iData, &(DataSize = 4));
+                printf("REG_DWORD ");
+                //printf("|| %x", iData);
+                wprintf(L"|| %d", Data);
                 break;
             case 11:
                 printf("REG_QWORD ");
@@ -222,6 +254,7 @@ void readValuesInKey(wstring wpath)
     }
     else
         cout << "\nError opening the specified subkey path (doesn't exist?).\n";
+    printf("%d values in total\n", index);
 
     RegCloseKey(hKey);
 }
@@ -251,8 +284,191 @@ void readKeysInKey(wstring wpath)
     else
         cout << "\nError opening the specified subkey path (doesn't exist?).\n";
 
+    printf("%d keys in total\n", index);
+
     RegCloseKey(hKey);
 }
+
+void recReadValuesInKey(wstring wpath)
+{
+    HKEY hKey;
+    DWORD index = 0;
+    wchar_t ValueName[MAX_PATH];
+    DWORD SizeValueName = MAX_PATH;
+    DWORD Type;
+    unsigned char Data[MAX_PATH];
+    DWORD DataSize = MAX_PATH;
+    unsigned long iData = 0;
+    int result = 0;
+    int intData = 0;
+
+    printf(">\n");
+
+    if (RegOpenKeyEx(HKEY_CURRENT_USER, wpath.c_str(), 0, KEY_ALL_ACCESS, &hKey) == ERROR_SUCCESS)
+    {
+        while (RegEnumValue(hKey, index, ValueName, &(SizeValueName = MAX_PATH), NULL, &Type, Data, &(DataSize = MAX_PATH)) != ERROR_NO_MORE_ITEMS)
+        {
+            index++;
+            printf("%ws ||", ValueName);
+            switch (Type)
+            {
+            case 1:
+                printf("REG_SZ ");
+                wprintf(L"|| %s", Data);
+                break;
+            case 2:
+                printf("REG_EXPAND_SZ ");
+                wprintf(L"|| %s", Data);
+                break;
+            case 3:
+                printf("REG_BINARY ");
+                wprintf(L"|| %d", Data);
+                break;
+            case 4:
+                //RegEnumValue(hKey, index - 1, ValueName, &(SizeValueName = MAX_PATH), NULL, &Type, iData, &(DataSize = 4));
+                printf("REG_DWORD ");
+                //printf("|| %x", iData);
+                wprintf(L"|| %d", Data);
+                break;
+            case 11:
+                printf("REG_QWORD ");
+                wprintf(L"|| %s", Data);
+                break;
+            case 7:
+                printf("REG_MULTI_SZ ");
+                wprintf(L"|| %s", Data);
+                break;
+            default:
+                printf("Undefined type ");
+                wprintf(L" Value %s \n", Data);
+            }
+            printf("\n");
+        }
+        printf("\n");
+    }
+    else
+        cout << "\nError opening the specified subkey path (doesn't exist?).\n";
+
+    RegCloseKey(hKey);
+}
+
+void recursiveOutput(wstring wpath)
+{
+    HKEY hKey;
+    DWORD index = 0;
+    wchar_t KeyName[MAX_PATH];
+    DWORD SizeKeyName = MAX_PATH;
+    DWORD Type;
+    wchar_t Class[MAX_PATH];
+    DWORD ClassSize = MAX_PATH;
+    int result = 0;
+    int intData = 0;
+    int flag = 1;
+
+    if (wpath == L"")
+    {
+        flag = 0;
+    }
+
+    if (RegOpenKeyEx(HKEY_CURRENT_USER, wpath.c_str(), 0, KEY_ALL_ACCESS, &hKey) == ERROR_SUCCESS)
+    {
+        recReadValuesInKey(wpath);
+        while (RegEnumKeyExW(hKey, index, KeyName, &(SizeKeyName = MAX_PATH), NULL, Class, &(SizeKeyName = MAX_PATH), NULL) != ERROR_NO_MORE_ITEMS)
+        {            
+            index++;
+            int length1 = 0, length2 = 0;         
+
+            if (flag)
+            {
+                wpath = MyStrcat(wpath.c_str(), L"\\");
+                wpath = MyStrcat(wpath.c_str(), L"\\");
+            }           
+            wpath = MyStrcat(wpath.c_str(), KeyName);
+
+            while (KeyName[length1] != '\0')
+                length1++;
+            while (wpath[length2] != '\0')
+                length2++;
+
+            wprintf(L"%s\n", wpath.c_str());
+            recursiveOutput(wpath);
+            if (flag)
+                wpath[length2 - length1 - 2] = '\0';
+            else
+                wpath[length2 - length1] = '\0';
+            
+        }
+    }
+    else
+        cout << "\nError opening the specified subkey path (doesn't exist?).\n";
+
+    RegCloseKey(hKey);
+}
+
+void recDeleteSubkey(wstring wpath, wstring wkey)
+{
+    HKEY hKey = 0;
+    string path;    
+
+    DWORD index = 0;
+    wchar_t KeyName[MAX_PATH];
+    DWORD SizeKeyName = MAX_PATH;
+    DWORD Type;
+    wchar_t Class[MAX_PATH];
+    DWORD ClassSize = MAX_PATH;
+    int result = 0;
+    int intData = 0;
+    int flag = 1;
+
+    /*if (wpath == L"")
+    {
+        printf("You shouldn't delete whole registry");
+        return;
+    }*/
+
+    if (RegOpenKeyEx(HKEY_CURRENT_USER, wpath.c_str(), 0, KEY_ALL_ACCESS, &hKey) == ERROR_SUCCESS)
+    {
+        if (RegDeleteKey(hKey, wkey.c_str()) == ERROR_SUCCESS)
+        {
+            wprintf(L"SubKey %s\\\\%s successfully removed\n", wpath.c_str(), wkey.c_str());
+            return;
+        }            
+        while (RegEnumKeyExW(hKey, index, KeyName, &(SizeKeyName = MAX_PATH), NULL, Class, &(SizeKeyName = MAX_PATH), NULL) != ERROR_NO_MORE_ITEMS)
+        {
+            index++;
+            int length1 = 0, length2 = 0;
+
+            if (flag)
+            {
+                wpath = MyStrcat(wpath.c_str(), L"\\");
+                wpath = MyStrcat(wpath.c_str(), L"\\");
+            }
+            wpath = MyStrcat(wpath.c_str(), KeyName);
+
+            while (KeyName[length1] != '\0')
+                length1++;
+            while (wpath[length2] != '\0')
+                length2++;
+
+            if (RegDeleteKey(hKey, KeyName) == ERROR_SUCCESS)
+            {
+                wprintf(L"SubKey %s successfully removed\n", wpath.c_str());
+            }
+            else
+                index--;
+            
+            recDeleteSubkey(wpath, KeyName);            
+
+            if (flag)
+                wpath[length2 - length1 - 2] = '\0';
+            else
+                wpath[length2 - length1] = '\0';
+        }             
+    }
+
+    RegCloseKey(hKey);
+}
+
 
 int main()
 {
@@ -261,6 +477,8 @@ int main()
     
     while (1)
     {
+        printf("\nCurrent key: %ws \n", path.c_str());
+
         do
         {
             printf("Choose operation: ");
@@ -292,6 +510,9 @@ int main()
             break;
         case 8:
             readKeysInKey(path);
+            break;
+        case 9:
+            recursiveOutput(path);
             break;
         case 0:
             return 0;
