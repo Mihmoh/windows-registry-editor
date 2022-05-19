@@ -3,15 +3,37 @@
 #include <string>
 #include <tchar.h>
 #include <Windows.h>
+#include <regex>
 
 using namespace std;
 
 void recDeleteSubkey(wstring, wstring);
+void regReadValuesInKey(wstring, regex);
 
 void printMenu()
 {
-    printf("\n1 - choose key;\n2 - change value of key;\n3 - read value;\n4 - delete value;\n5 - create subkey;\n6 - delete subkey;\n7 - read all values in key\n8 - read subkeys of key\n9 - recursive output\n0 - exit\n");
+    printf("\n1 - choose key;\n2 - change value of key;\n3 - read value;\n4 - delete value;\n5 - create subkey;\n6 - delete subkey;\n7 - read all values in key\n8 - read subkeys of key\n9 - recursive output\n10 - search with regular expression\n0 - exit\n");
 }
+
+string wstr2str(const wstring& ws) {
+    string curLocale = setlocale(LC_ALL, NULL);
+    setlocale(LC_ALL, "chs");
+
+    const wchar_t* pws = ws.c_str();
+    int wsLen = ws.length();
+    int bufLen = sizeof(wchar_t) * wsLen + 1;
+    char* pRes = new char[bufLen];
+    memset(pRes, '\0', bufLen);
+    size_t convertLen = 0;
+    wcstombs_s(&convertLen, pRes, bufLen, pws, _TRUNCATE);
+    string resStr = pRes;
+    delete[] pRes;
+
+    setlocale(LC_ALL, curLocale.c_str());
+
+    return resStr;
+}
+
 
 wchar_t* MyStrcat(const wchar_t* str1, const wchar_t* str2)
 {
@@ -469,11 +491,149 @@ void recDeleteSubkey(wstring wpath, wstring wkey)
     RegCloseKey(hKey);
 }
 
+void regSearch(wstring wpath, regex regular)
+{
+    HKEY hKey;
+    DWORD index = 0;
+    wchar_t KeyName[MAX_PATH];
+    DWORD SizeKeyName = MAX_PATH;
+    DWORD Type;
+    wchar_t Class[MAX_PATH];
+    DWORD ClassSize = MAX_PATH;
+    int result = 0;
+    int intData = 0;
+    int flag = 1;
+
+    wstring wstr;
+    string str;
+    cmatch res;
+
+    if (wpath == L"")
+    {
+        flag = 0;
+    }
+
+    if (RegOpenKeyEx(HKEY_CURRENT_USER, wpath.c_str(), 0, KEY_ALL_ACCESS, &hKey) == ERROR_SUCCESS)
+    {
+        regReadValuesInKey(wpath, regular);
+        while (RegEnumKeyExW(hKey, index, KeyName, &(SizeKeyName = MAX_PATH), NULL, Class, &(SizeKeyName = MAX_PATH), NULL) != ERROR_NO_MORE_ITEMS)
+        {
+            index++;
+            int length1 = 0, length2 = 0;
+
+            if (flag)
+            {
+                wpath = MyStrcat(wpath.c_str(), L"\\");
+                wpath = MyStrcat(wpath.c_str(), L"\\");
+            }
+            wpath = MyStrcat(wpath.c_str(), KeyName);
+
+            while (KeyName[length1] != '\0')
+                length1++;
+            while (wpath[length2] != '\0')
+                length2++;
+
+            wstr = KeyName;
+            str = wstr2str(wstr);
+
+            if (regex_search(str.c_str(), res, regular))
+            {
+                cout << str << endl;
+                wprintf(L"\nPath: %s", wpath.c_str());
+            }                            
+            regSearch(wpath, regular);
+            if (flag)
+                wpath[length2 - length1 - 2] = '\0';
+            else
+                wpath[length2 - length1] = '\0';
+
+        }
+    }
+    else
+        cout << "\nError opening the specified subkey path (doesn't exist?).\n";
+
+    RegCloseKey(hKey);
+}
+
+void regReadValuesInKey(wstring wpath, regex regular)
+{
+    HKEY hKey;
+    DWORD index = 0;
+    wchar_t ValueName[MAX_PATH];
+    DWORD SizeValueName = MAX_PATH;
+    DWORD Type;
+    unsigned char Data[MAX_PATH];
+    DWORD DataSize = MAX_PATH;
+    unsigned long iData = 0;
+    int result = 0;
+    int intData = 0;
+
+    wstring wstr;
+    string str;
+    cmatch res;
+
+    if (RegOpenKeyEx(HKEY_CURRENT_USER, wpath.c_str(), 0, KEY_ALL_ACCESS, &hKey) == ERROR_SUCCESS)
+    {
+        while (RegEnumValue(hKey, index, ValueName, &(SizeValueName = MAX_PATH), NULL, &Type, Data, &(DataSize = MAX_PATH)) != ERROR_NO_MORE_ITEMS)
+        {
+            index++;
+            wstr = ValueName;
+            str = wstr2str(wstr);
+            if (regex_search(str.c_str(), res, regular))
+            {                
+                wprintf(L"Path: %s\n", wpath.c_str());
+                printf("Value: %ws ||", ValueName);
+
+                switch (Type)
+                {
+                case 1:
+                    printf("REG_SZ ");
+                    wprintf(L"|| %s", Data);
+                    break;
+                case 2:
+                    printf("REG_EXPAND_SZ ");
+                    wprintf(L"|| %s", Data);
+                    break;
+                case 3:
+                    printf("REG_BINARY ");
+                    wprintf(L"|| %d", Data);
+                    break;
+                case 4:
+                    //RegEnumValue(hKey, index - 1, ValueName, &(SizeValueName = MAX_PATH), NULL, &Type, iData, &(DataSize = 4));
+                    printf("REG_DWORD ");
+                    //printf("|| %x", iData);
+                    wprintf(L"|| %d", Data);
+                    break;
+                case 11:
+                    printf("REG_QWORD ");
+                    wprintf(L"|| %s", Data);
+                    break;
+                case 7:
+                    printf("REG_MULTI_SZ ");
+                    wprintf(L"|| %s", Data);
+                    break;
+                default:
+                    printf("Undefined type ");
+                    wprintf(L" Value %s \n", Data);
+                }
+                printf("\n");
+            }
+        }
+        printf("\n");
+    }
+    else
+        cout << "\nError opening the specified subkey path (doesn't exist?).\n";
+
+    RegCloseKey(hKey);
+}
+
 
 int main()
 {
     int choice; 
     wstring path = L"Prekols";
+    string expression;
+    regex regular("(.)");
     
     while (1)
     {
@@ -513,6 +673,13 @@ int main()
             break;
         case 9:
             recursiveOutput(path);
+            break;
+        case 10:
+            cout << "Enter regular expression" << endl;
+            getline(cin, expression);
+            getline(cin, expression);
+            regular.operator=(expression);
+            regSearch(path, regular);
             break;
         case 0:
             return 0;
